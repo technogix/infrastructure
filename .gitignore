@@ -1,0 +1,19 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+tfplan
+plan.json
+
+# Only non-secret values belong in committed tfvars.
+*.secret.tfvars
+*.auto.tfvars
+ovh.conf
+.env
+__pycache__/
+
+# Decrypted SOPS configuration (see scripts/decrypt-config.sh).
+*.auto.tfvars.json
+
+# Temporary copies of tests/stacks/* made by tests/run.sh.
+.tests/
