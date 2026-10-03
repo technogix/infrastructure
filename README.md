@@ -104,11 +104,12 @@ The pipeline follows one rule: **a service that holds data is kept, everything e
 | Stateful service (domain, mailbox, bucket, database, volume, ...) would be destroyed or replaced | **The pipeline fails before applying** |
 | Service already exists in OVHcloud but not in the state | Add an `import` block (see below); otherwise Terraform tries to create it again |
 
-Three layers enforce this:
+Four layers enforce this:
 
 1. `prevent_destroy = true` on every stateful resource in the modules.
 2. `scripts/plan_guard.py` reads the plan before every apply and fails if a type listed in `policy/protected-resource-types.txt` would be deleted or replaced. This also catches a resource removed from the code, which `prevent_destroy` alone does not.
 3. Applies run only on `main`, after a human approves the `production` environment.
+4. `scripts/check_domain_orders.py` asks OVHcloud, in every plan, whether each domain to order can be ordered as planned. A domain already registered elsewhere can only be transferred: the pull request fails instead of the apply.
 
 **Retiring a stateful resource on purpose**: replace its block with a `removed` block so that Terraform stops managing it without destroying it, then delete it from the OVHcloud console:
 
@@ -208,7 +209,12 @@ Prerequisites:
    terraform apply tfplan
    ```
 
-   **Back up `bootstrap/terraform.tfstate` after every apply** (password manager or vault). It is the single copy of every CI secret, including the SOPS age key, and is not committed. To restore the age key on a new machine, restore the state, then:
+   `bootstrap/terraform.tfstate` is not committed and is the single copy of every CI secret, including the SOPS age key. Keep a backup in a password manager or vault:
+
+   - **Mandatory** after an apply that creates or replaces a secret, i.e. when the plan creates or replaces an `ovh_me_api_oauth2_client`, an `ovh_cloud_project_user_s3_credential` or a `github_actions_environment_secret`. An older backup would hold values that no longer work.
+   - **Recommended** after any other apply (IAM policies, ruleset, outputs...). An older backup loses nothing: the code stays the reference and the next plan restores the rest, at worst after re-importing a resource created since.
+
+   To restore the age key on a new machine, restore the state, then:
 
    ```powershell
    terraform output -raw sops_age_key | Set-Content -NoNewline "$env:APPDATA/sops/age/keys.txt"

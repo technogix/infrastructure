@@ -1,0 +1,179 @@
+name: deploy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Pull requests: a new push cancels the previous plan.
+# main: runs are queued, never cancelled mid-apply.
+concurrency:
+  group: deploy-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TF_VERSION: "1.16.4"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  SOPS_VERSION: "3.13.3"
+  SOPS_SHA256: "e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      stacks: ${{ steps.stacks.outputs.stacks }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: stacks
+        run: echo "stacks=$(jq -c . stacks/stacks.json)" >> "$GITHUB_OUTPUT"
+
+  # Static checks and offline tests: no secrets involved.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+      - name: terraform validate
+        run: |
+          for dir in bootstrap stacks/*/; do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false
+            terraform -chdir="$dir" validate
+            echo "::endgroup::"
+          done
+      - name: Tests
+        run: tests/run.sh
+
+  # Read-only plan of every stack: OVH service account with read-only IAM
+  # policy, S3 key read-only, no state lock taken.
+  plan:
+    needs: [setup, check]
+    runs-on: ubuntu-latest
+    environment: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: ${{ fromJSON(needs.setup.outputs.stacks) }}
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    env:
+      OVH_CLIENT_ID: ${{ secrets.OVH_CLIENT_ID }}
+      OVH_CLIENT_SECRET: ${{ secrets.OVH_CLIENT_SECRET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.STATE_S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.STATE_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Install sops
+        working-directory: .
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSLo "$RUNNER_TEMP/bin/sops" "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64"
+          echo "${SOPS_SHA256}  $RUNNER_TEMP/bin/sops" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/sops"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # Must run before any step that could print private values: it masks them.
+      - name: Decrypt private configuration
+        working-directory: .
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: scripts/decrypt-config.sh
+      - name: terraform init
+        run: terraform init -backend-config=../../backend.hcl
+      - name: terraform plan
+        run: terraform plan -lock=false -out=tfplan
+      # The repository is public, so are the logs: only counts go to the job
+      # summary. Private values in the log above are masked as ***.
+      - name: Guard stateful resources
+        run: |
+          terraform show -json tfplan > plan.json
+          echo "### \`${{ matrix.stack }}\`" >> "$GITHUB_STEP_SUMMARY"
+          python3 ../../scripts/plan_guard.py plan.json | tee -a "$GITHUB_STEP_SUMMARY"
+      # A domain registered elsewhere can only be transferred: fail now rather
+      # than at apply time.
+      - name: Check domain orders
+        run: python3 ../../scripts/check_domain_orders.py plan.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Single required check of the main branch ruleset (bootstrap/github.tf),
+  # whatever the number of stacks in the plan matrix.
+  plan-result:
+    if: always()
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: All plans succeeded
+        run: '[ "${{ needs.plan.result }}" = "success" ]'
+
+  # Apply on main only, after approval of the "production" environment.
+  # Stacks are applied in the order of stacks/stacks.json; each one is
+  # re-planned with the write credentials and re-checked by the guard.
+  apply:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [setup, plan]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      OVH_CLIENT_ID: ${{ secrets.OVH_CLIENT_ID }}
+      OVH_CLIENT_SECRET: ${{ secrets.OVH_CLIENT_SECRET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.STATE_S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.STATE_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Install sops
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSLo "$RUNNER_TEMP/bin/sops" "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64"
+          echo "${SOPS_SHA256}  $RUNNER_TEMP/bin/sops" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/sops"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # Must run before any step that could print private values: it masks them.
+      - name: Decrypt private configuration
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: scripts/decrypt-config.sh
+      - name: terraform apply
+        run: |
+          set -euo pipefail
+          for stack in $(jq -r '.[]' stacks/stacks.json); do
+            echo "::group::$stack"
+            cd "stacks/$stack"
+            terraform init -backend-config=../../backend.hcl
+
+            set +e
+            terraform plan -out=tfplan -detailed-exitcode
+            code=$?
+            set -e
+
+            case $code in
+              0) echo "No changes." ;;
+              2)
+                terraform show -json tfplan > plan.json
+                python3 ../../scripts/plan_guard.py plan.json
+                python3 ../../scripts/check_domain_orders.py plan.json
+                terraform apply tfplan
+                ;;
+              *) exit "$code" ;;
+            esac
+
+            cd - > /dev/null
+            echo "::endgroup::"
+          done
