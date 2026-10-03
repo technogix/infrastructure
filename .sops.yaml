@@ -1,0 +1,8 @@
+# Private configuration (mailbox addresses, names, ...) is committed encrypted.
+# Edit with: sops edit stacks/email/mailboxes.enc.yaml
+# To give someone access, add their age public key below, then run:
+#   sops updatekeys stacks/email/mailboxes.enc.yaml
+creation_rules:
+  - path_regex: \.enc\.yaml$
+    age: >-
+      age1v0zp5j0etjyxt374us7eft4mp6re8zsavzdhtqd6xpyvlc8meptqvqcsuj

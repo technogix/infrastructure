@@ -1,0 +1,28 @@
+# Resource types that hold data. The CI refuses any plan that would destroy or
+# replace one of them (glob patterns allowed). Resources not listed here are
+# considered stateless: Terraform may freely replace or recreate them.
+#
+# To retire a protected resource, stop managing it with a `removed` block
+# (lifecycle { destroy = false }) and delete it manually from the OVHcloud console.
+
+# Domains and DNS
+ovh_domain_name
+ovh_domain_zone
+
+# Email
+ovh_email_domain_account
+
+# Storage
+ovh_cloud_project_storage
+ovh_cloud_project_volume
+
+# Databases
+ovh_cloud_project_database
+ovh_cloud_project_database_*
+ovh_hosting_privatedatabase*
+
+# Web hosting
+ovh_hosting_*
+
+# Uncomment if VMs keep data on their local disk instead of attached volumes:
+# ovh_cloud_project_instance
