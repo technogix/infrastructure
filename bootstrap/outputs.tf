@@ -40,3 +40,8 @@ output "sops_age_key" {
   value       = local.sops_age_key
   sensitive   = true
 }
+
+output "managed_domains" {
+  description = "Domains the CI may manage (used by tests/bootstrap)."
+  value       = var.managed_domains
+}

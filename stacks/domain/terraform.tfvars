@@ -2,5 +2,5 @@
 ovh_subsidiary = "IE"
 
 domains = {
-  "technogix.io" = {}
+  "technogix.dev" = {}
 }

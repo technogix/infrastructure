@@ -104,11 +104,12 @@ The pipeline follows one rule: **a service that holds data is kept, everything e
 | Stateful service (domain, mailbox, bucket, database, volume, ...) would be destroyed or replaced | **The pipeline fails before applying** |
 | Service already exists in OVHcloud but not in the state | Add an `import` block (see below); otherwise Terraform tries to create it again |
 
-Three layers enforce this:
+Four layers enforce this:
 
 1. `prevent_destroy = true` on every stateful resource in the modules.
 2. `scripts/plan_guard.py` reads the plan before every apply and fails if a type listed in `policy/protected-resource-types.txt` would be deleted or replaced. This also catches a resource removed from the code, which `prevent_destroy` alone does not.
 3. Applies run only on `main`, after a human approves the `production` environment.
+4. `scripts/check_domain_orders.py` asks OVHcloud, in every plan, whether each domain to order can be ordered as planned. A domain already registered elsewhere can only be transferred: the pull request fails instead of the apply.
 
 **Retiring a stateful resource on purpose**: replace its block with a `removed` block so that Terraform stops managing it without destroying it, then delete it from the OVHcloud console:
 

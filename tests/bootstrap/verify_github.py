@@ -64,6 +64,25 @@ def main():
     check("no approval needed (pull requests)", "required_reviewers" not in
           {r["type"] for r in envs["plan"].get("protection_rules", [])})
 
+    print("== main branch ruleset")
+    rulesets = [r for r in api(f"repos/{REPO}/rulesets") if r["name"] == "main"]
+    check("ruleset main exists", len(rulesets) == 1)
+    if rulesets:
+        rs = api(f"repos/{REPO}/rulesets/{rulesets[0]['id']}")
+        rules = {r["type"]: r.get("parameters", {}) for r in rs.get("rules", [])}
+        check("ruleset is enforced", rs.get("enforcement") == "active", rs.get("enforcement"))
+        check("targets the default branch",
+              rs.get("conditions", {}).get("ref_name", {}).get("include") == ["~DEFAULT_BRANCH"])
+        check("nobody can bypass it", not rs.get("bypass_actors"))
+        check("changes only through a pull request", "pull_request" in rules)
+        check("squash merges only",
+              rules.get("pull_request", {}).get("allowed_merge_methods") == ["squash"])
+        contexts = {c["context"] for c in rules.get("required_status_checks", {}).get("required_status_checks", [])}
+        check("check and plan-result must pass", contexts == {"check", "plan-result"}, ", ".join(sorted(contexts)))
+        for rule, label in (("non_fast_forward", "no force push"), ("deletion", "main cannot be deleted"),
+                            ("required_linear_history", "linear history")):
+            check(label, rule in rules)
+
     print("== Secrets (names only: values cannot be read back)")
     for env in ("plan", "production"):
         names = secret_names(env)

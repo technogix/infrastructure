@@ -12,7 +12,7 @@ variable "cloud_project_id" {
 variable "managed_domains" {
   description = "Domains the CI may manage (domain and email). Must include every domain of stacks/domain."
   type        = list(string)
-  default     = ["technogix.io"]
+  default     = ["technogix.dev"]
 }
 
 variable "region" {

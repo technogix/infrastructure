@@ -85,9 +85,8 @@ def main():
         sys.exit(f"Cannot read bootstrap outputs:\n{out.stderr}")
     outputs = json.loads(out.stdout)
     creds = outputs["ci_credentials"]["value"]
-    project = subprocess.run(["terraform", "output", "-raw", "cloud_project_id"],
-                             cwd=ROOT / "bootstrap", capture_output=True, text=True).stdout.strip()
-    domain = "technogix.io"
+    project = outputs["cloud_project_id"]["value"]
+    domains = outputs["managed_domains"]["value"]
 
     tokens = {}
     print("== Authentication")
@@ -102,7 +101,8 @@ def main():
     plan, prod = tokens["plan"], tokens["production"]
 
     print("== plan: read-only")
-    expect_allowed_on_resource("plan: reads the domain", call(plan, "GET", f"/domain/name/{domain}")[0])
+    for domain in domains:
+        expect_allowed_on_resource(f"plan: reads {domain}", call(plan, "GET", f"/domain/name/{domain}")[0])
     expect_denied("plan: cannot read the account", call(plan, "GET", "/me")[0])
     expect_denied("plan: cannot read payment methods", call(plan, "GET", "/me/payment/method")[0])
     status, cart = call(plan, "POST", "/order/cart", {"ovhSubsidiary": SUBSIDIARY, "description": "ci-check"})
@@ -112,7 +112,8 @@ def main():
         report("FAIL", "plan: cannot use an order cart", f"cart creation HTTP {status}")
 
     print("== production: create and update, never delete")
-    expect_allowed_on_resource("production: reads the domain", call(prod, "GET", f"/domain/name/{domain}")[0])
+    for domain in domains:
+        expect_allowed_on_resource(f"production: reads {domain}", call(prod, "GET", f"/domain/name/{domain}")[0])
     expect_allowed("production: reads the account", call(prod, "GET", "/me")[0])
     expect_allowed("production: reads payment methods", call(prod, "GET", "/me/payment/method?default=true")[0])
     status, cart = call(prod, "POST", "/order/cart", {"ovhSubsidiary": SUBSIDIARY, "description": "ci-check"})
@@ -122,14 +123,15 @@ def main():
         report("FAIL", "production: can use an order cart", f"cart creation HTTP {status}")
     # production may list mailboxes: 200 proves the email offer exists, so the
     # DELETE below must be stopped by IAM (403), not reach "account not found".
-    status, _ = call(prod, "GET", f"/email/domain/{domain}/account")
-    if status == 404:
-        report("SKIP", "production: cannot delete a mailbox", "email offer does not exist yet")
-    elif status != 200:
-        report("FAIL", "production: lists mailboxes", f"HTTP {status}")
-    else:
-        expect_denied("production: cannot delete a mailbox",
-                      call(prod, "DELETE", f"/email/domain/{domain}/account/ci-check")[0])
+    for domain in domains:
+        status, _ = call(prod, "GET", f"/email/domain/{domain}/account")
+        if status == 404:
+            report("SKIP", f"production: cannot delete a mailbox of {domain}", "email offer does not exist yet")
+        elif status != 200:
+            report("FAIL", f"production: lists mailboxes of {domain}", f"HTTP {status}")
+        else:
+            expect_denied(f"production: cannot delete a mailbox of {domain}",
+                          call(prod, "DELETE", f"/email/domain/{domain}/account/ci-check")[0])
 
     print("== Isolation: no access outside the managed services")
     for env, tok in tokens.items():

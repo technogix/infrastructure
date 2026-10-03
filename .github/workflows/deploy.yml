@@ -104,6 +104,10 @@ jobs:
           terraform show -json tfplan > plan.json
           echo "### \`${{ matrix.stack }}\`" >> "$GITHUB_STEP_SUMMARY"
           python3 ../../scripts/plan_guard.py plan.json | tee -a "$GITHUB_STEP_SUMMARY"
+      # A domain registered elsewhere can only be transferred: fail now rather
+      # than at apply time.
+      - name: Check domain orders
+        run: python3 ../../scripts/check_domain_orders.py plan.json | tee -a "$GITHUB_STEP_SUMMARY"
 
   # Single required check of the main branch ruleset (bootstrap/github.tf),
   # whatever the number of stacks in the plan matrix.
@@ -164,6 +168,7 @@ jobs:
               2)
                 terraform show -json tfplan > plan.json
                 python3 ../../scripts/plan_guard.py plan.json
+                python3 ../../scripts/check_domain_orders.py plan.json
                 terraform apply tfplan
                 ;;
               *) exit "$code" ;;

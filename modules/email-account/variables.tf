@@ -1,5 +1,5 @@
 variable "domain" {
-  description = "Domain of the email offer (e.g. technogix.io)."
+  description = "Domain of the email offer (e.g. technogix.dev)."
   type        = string
 }
 
