@@ -209,7 +209,12 @@ Prerequisites:
    terraform apply tfplan
    ```
 
-   **Back up `bootstrap/terraform.tfstate` after every apply** (password manager or vault). It is the single copy of every CI secret, including the SOPS age key, and is not committed. To restore the age key on a new machine, restore the state, then:
+   `bootstrap/terraform.tfstate` is not committed and is the single copy of every CI secret, including the SOPS age key. Keep a backup in a password manager or vault:
+
+   - **Mandatory** after an apply that creates or replaces a secret, i.e. when the plan creates or replaces an `ovh_me_api_oauth2_client`, an `ovh_cloud_project_user_s3_credential` or a `github_actions_environment_secret`. An older backup would hold values that no longer work.
+   - **Recommended** after any other apply (IAM policies, ruleset, outputs...). An older backup loses nothing: the code stays the reference and the next plan restores the rest, at worst after re-importing a resource created since.
+
+   To restore the age key on a new machine, restore the state, then:
 
    ```powershell
    terraform output -raw sops_age_key | Set-Content -NoNewline "$env:APPDATA/sops/age/keys.txt"
