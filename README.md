@@ -192,7 +192,7 @@ Prerequisites:
 - An OVHcloud account with a **default payment method** (SEPA direct debit or card). Domain orders are paid with it.
 - An OVHcloud **Public Cloud project**, which hosts the state bucket and later the VMs.
 
-1. **Bootstrap** (once, locally, then after any change to `bootstrap/`). It creates the state bucket, the CI identities, the GitHub environments and all their secrets. It needs:
+1. **Bootstrap** (once, locally, then after any change to `bootstrap/`). It creates the state bucket, the CI identities, the GitHub environments and all their secrets, and the `website` repository (settings, GitHub Pages, ruleset). It needs:
    - the OVH admin key in `~/.ovh.conf` (`GET`, `POST`, `PUT`, `DELETE` on `/*`);
    - a GitHub login with admin rights on the repository: `gh auth login`;
    - the gitignored `bootstrap/bootstrap.auto.tfvars`:
@@ -240,9 +240,17 @@ tests/run.sh --live   # offline, then live checks against OVHcloud (local only)
 |---|---|---|
 | `tests/scripts/` | Unit tests of the CI scripts (plan guard) | CI and local |
 | `tests/stacks/<stack>/` | `terraform test` files of a stack, with mocked providers | CI and local |
-| `tests/bootstrap/` | Live checks of the bootstrap: state bucket (real Terraform backend cycle, forbidden operations), CI identities (IAM permissions) and GitHub environments (protection rules, secret names) | Local only (`--live`) |
+| `tests/bootstrap/` | Live checks of the bootstrap: state bucket (real Terraform backend cycle, forbidden operations), CI identities (IAM permissions) and GitHub repositories (environments, secret names, rulesets, website settings and Pages) | Local only (`--live`) |
 
 The live checks need the OVH admin key and the local bootstrap state, so they never run in CI. Terraform only accepts tests inside a configuration directory: `run.sh` copies `tests/stacks/<stack>/` into a temporary, gitignored `stacks/<stack>/.tests/` while it runs.
+
+## Website repository
+
+`bootstrap/website.tf` creates and configures `technogix/website` (Astro + React): public, squash merges only, branches deleted after merge, GitHub Pages published by a workflow, `main` changed only through pull requests. Its content (the site and its publishing workflow) lives in that repository and is pushed with git.
+
+The repository holds code and history: `prevent_destroy`, and `archive_on_destroy` so that even a destroy only archives it. `github_repository` is a protected type of the pipeline guard.
+
+The custom domain (`technogix.dev`) and its DNS records are added once the domain is delivered.
 
 ## State bucket protection
 
