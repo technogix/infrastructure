@@ -16,6 +16,7 @@ modules/          Reusable building blocks (domain, email-account, ...)
 stacks/           Deployable units, one remote state each
   domain/         Domain names
   email/          Mailboxes
+  website/        Website repository, GitHub Pages and its DNS records
   stacks.json     Apply order of the stacks
 policy/           Resource types the pipeline must never destroy
 scripts/          Repository tooling, used by the CI and locally (plan guard, decryption)
@@ -160,11 +161,23 @@ Secrets live only in **GitHub environments**, never in the repository. The two e
 | `OVH_CLIENT_ID` / `OVH_CLIENT_SECRET` | `plan` service account (read-only) | `production` service account |
 | `STATE_S3_ACCESS_KEY_ID` / `STATE_S3_SECRET_ACCESS_KEY` | `reader` S3 key | `writer` S3 key |
 | `SOPS_AGE_KEY` | age private key (the `AGE-SECRET-KEY-...` line) | same |
+| `GH_APP_ID` / `GH_APP_PRIVATE_KEY` | GitHub App `technogix-infra-plan` (read-only) | GitHub App `technogix-infra-production` |
 
 The environments and every secret are created by `bootstrap/github.tf`: nobody copies a credential by hand. The `production` environment:
 
 - requires an approval, which admins cannot bypass;
 - only accepts deployments from `main`. A workflow modified in a pull request can then never read the write credentials.
+
+### CI identities on GitHub
+
+The `github` provider of the stacks authenticates as a GitHub App, through an installation token (valid 1 hour) minted in each job by `actions/create-github-app-token`. GitHub cannot create Apps through its API: both are a **manual prerequisite**, created once in the organisation settings (Developer settings > GitHub Apps), installed on all repositories, webhook disabled:
+
+| App | Repository permissions |
+|---|---|
+| `technogix-infra-plan` | Administration, Contents, Pages, Dependabot alerts: read-only |
+| `technogix-infra-production` | Administration, Contents, Pages, Dependabot alerts: read and write |
+
+Their App IDs and the paths of their private keys go in `github_apps` of the gitignored `bootstrap/bootstrap.auto.tfvars`; the bootstrap pushes them into the environments. Accepted risk: installed on all repositories (required to create repositories), the production App could also change this repository's settings; it only runs on `main`, after approval.
 
 ### CI identities on OVHcloud
 
@@ -244,6 +257,18 @@ tests/run.sh --live   # offline, then live checks against OVHcloud (local only)
 | `tests/bootstrap/` | Live checks of the bootstrap: state bucket (real Terraform backend cycle, forbidden operations), CI identities (IAM permissions) and GitHub environments (protection rules, secret names) | Local only (`--live`) |
 
 The live checks need the OVH admin key and the local bootstrap state, so they never run in CI. Terraform only accepts tests inside a configuration directory: `run.sh` copies `tests/stacks/<stack>/` into a temporary, gitignored `stacks/<stack>/.tests/` while it runs.
+
+## Website
+
+`stacks/website` (applied by the CI) creates the `technogix/website` repository (Astro + React), publishes it on GitHub Pages and serves it on `technogix.dev` and `www.technogix.dev`:
+
+- repository: public, squash merges only (ruleset), branches deleted after merge, never deleted (`prevent_destroy`, `archive_on_destroy`, protected type of the pipeline guard);
+- GitHub Pages: published by a workflow of the website repository, custom domain on the apex. `.dev` is on the HSTS preload list: browsers always use HTTPS;
+- DNS (OVHcloud zone): four `A` and four `AAAA` records to GitHub Pages on the apex, `www` as a `CNAME` to `technogix.github.io`.
+
+A new OVHcloud zone points the apex and `www` to the OVHcloud parking page. Terraform cannot delete records it does not manage, so the stack runs `scripts/remove_ovh_parking_records.py` once at apply time (a `terraform_data` step), before creating the site records: on a rebuild from scratch, the parking of the new zone is removed without any manual step. It only selects the parking records (`A 213.186.33.5`, `TXT "1|..."`, `TXT "3|welcome"` on the apex and `www`); mail records are never touched (unit tests in `tests/scripts/`).
+
+The site content and its publishing workflow live in the website repository and are pushed with git.
 
 ## State bucket protection
 

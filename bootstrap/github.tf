@@ -1,5 +1,7 @@
 # GitHub environments of the deploy workflow, and their secrets. Every secret
 # value comes from this bootstrap: no CI credential is ever copied by hand.
+# GH_APP_*: GitHub App of each environment (GitHub forbids the GITHUB_ prefix
+# for secret names). The workflow turns them into an installation token.
 
 data "github_user" "admin" {
   # Empty username: the user authenticated with the GitHub token.
@@ -69,6 +71,8 @@ locals {
       "${name}/STATE_S3_ACCESS_KEY_ID"     = { env = e.env.environment, value = ovh_cloud_project_user_s3_credential.tfstate[e.s3].access_key_id }
       "${name}/STATE_S3_SECRET_ACCESS_KEY" = { env = e.env.environment, value = ovh_cloud_project_user_s3_credential.tfstate[e.s3].secret_access_key }
       "${name}/SOPS_AGE_KEY"               = { env = e.env.environment, value = local.sops_age_key }
+      "${name}/GH_APP_ID"                  = { env = e.env.environment, value = var.github_apps[name].app_id }
+      "${name}/GH_APP_PRIVATE_KEY"         = { env = e.env.environment, value = sensitive(file(pathexpand(var.github_apps[name].private_key_file))) }
     }
   ]...)
 }
