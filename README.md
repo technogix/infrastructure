@@ -279,4 +279,4 @@ terraform output -json initial_passwords
 ## Notes
 
 - **Cost**: applying the `domain` stack places a real, paid order.
-- **Email offer**: mailboxes are created on the `/email/domain/<domain>` service (MX Plan / Zimbra). OVHcloud normally includes it with the domain. If the `email` stack fails on the first run, enable the email offer in the OVHcloud control panel and run the pipeline again.
+- **Email offer (manual prerequisite)**: a domain comes with the free `redirect` email offer, which has no mailbox. Mailboxes need an MX Plan (MX005: 5 mailboxes), ordered once from the OVHcloud control panel (Web Cloud > Emails > the domain > change offer): the Terraform provider cannot order or upgrade email offers. Mailbox sizes must be one of the MX Plan sizes, in decimal units (5 GB = `5000000000`); the email stack rejects any other size at plan time.

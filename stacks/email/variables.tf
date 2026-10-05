@@ -17,8 +17,13 @@ variable "company_mailboxes" {
   type = list(object({
     address     = string
     description = string
-    size        = optional(number, 5368709120)
+    size        = optional(number, 5000000000)
   }))
+
+  validation {
+    condition     = alltrue([for m in var.company_mailboxes : contains([2500000, 5000000, 25000000, 50000000, 100000000, 250000000, 500000000, 1000000000, 1500000000, 2000000000, 5000000000], m.size)])
+    error_message = "Size must be one of the MX Plan sizes: 2.5 MB, 5 MB, 25 MB, 50 MB, 100 MB, 250 MB, 500 MB, 1 GB, 1.5 GB, 2 GB or 5 GB (in bytes, decimal units)."
+  }
 
   validation {
     condition     = alltrue([for m in var.company_mailboxes : can(regex("^[a-z0-9]+([.-][a-z0-9]+)*$", m.address))])
@@ -31,8 +36,13 @@ variable "users" {
   type = list(object({
     address   = string
     full_name = string
-    size      = optional(number, 5368709120)
+    size      = optional(number, 5000000000)
   }))
+
+  validation {
+    condition     = alltrue([for m in var.users : contains([2500000, 5000000, 25000000, 50000000, 100000000, 250000000, 500000000, 1000000000, 1500000000, 2000000000, 5000000000], m.size)])
+    error_message = "Size must be one of the MX Plan sizes: 2.5 MB, 5 MB, 25 MB, 50 MB, 100 MB, 250 MB, 500 MB, 1 GB, 1.5 GB, 2 GB or 5 GB (in bytes, decimal units)."
+  }
 
   validation {
     condition     = alltrue([for u in var.users : can(regex("^[a-z0-9]+([.-][a-z0-9]+)*$", u.address))])
