@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Verify the website: DNS, GitHub Pages and HTTPS.
+"""Verify the sites: DNS, GitHub Pages and HTTPS.
 
-Live test, run locally (tests/run.sh --live). Read-only. Values come from
-stacks/website/terraform.tfvars:
-  - public DNS (Cloudflare DNS over HTTPS): the apex resolves only to the
-    GitHub Pages addresses (no OVHcloud parking left), www is a CNAME to
-    <owner>.github.io;
+Live test, run locally (tests/run.sh --live). Read-only. For each site of
+stacks/website/terraform.tfvars.json:
+  - public DNS (Cloudflare DNS over HTTPS): an apex site resolves only to the
+    GitHub Pages addresses (no OVHcloud parking left) and www is a CNAME to
+    <owner>.github.io; a subdomain site is a CNAME to <owner>.github.io;
   - GitHub Pages: custom domain set, published by a workflow, certificate;
   - the site answers over HTTPS on the apex and www.
 Needs GITHUB_TOKEN (taken from the GitHub CLI login by run.sh).
@@ -13,7 +13,6 @@ Needs GITHUB_TOKEN (taken from the GitHub CLI login by run.sh).
 
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.parse
@@ -34,8 +33,7 @@ def check(label, ok, detail=""):
 
 
 def tfvars():
-    text = (ROOT / "stacks" / "website" / "terraform.tfvars").read_text(encoding="utf-8")
-    return dict(re.findall(r'^(\w+)\s*=\s*"([^"]*)"', text, re.MULTILINE))
+    return json.loads((ROOT / "stacks" / "website" / "terraform.tfvars.json").read_text(encoding="utf-8"))
 
 
 def dns(name, rtype):
@@ -71,25 +69,33 @@ def main():
     if not os.environ.get("GITHUB_TOKEN"):
         sys.exit("GITHUB_TOKEN is not set (run through tests/run.sh --live, or `gh auth login`).")
     v = tfvars()
-    domain, owner, repo = v["domain"], v["github_owner"], v["repository"]
+    zone, owner = v["zone"], v["github_owner"]
+    github_io = f"{owner}.github.io".lower()
 
-    print(f"== DNS of {domain}")
-    a, aaaa = dns(domain, "A"), dns(domain, "AAAA")
-    check("apex A records are exactly the GitHub Pages addresses", a == GITHUB_PAGES_IPV4, ", ".join(sorted(a)))
-    check("apex AAAA records are exactly the GitHub Pages addresses", aaaa == GITHUB_PAGES_IPV6, ", ".join(sorted(aaaa)))
-    cname = dns(f"www.{domain}", "CNAME")
-    check(f"www is a CNAME to {owner}.github.io", cname == {f"{owner}.github.io".lower()}, ", ".join(cname))
+    for repo, site in v["sites"].items():
+        subdomain = site.get("subdomain", "")
+        hostname = f"{subdomain}.{zone}" if subdomain else zone
+        print(f"== {repo}: {hostname}")
 
-    print(f"== GitHub Pages of {owner}/{repo}")
-    pages = github(f"repos/{owner}/{repo}/pages")
-    check("custom domain set", pages.get("cname") == domain, pages.get("cname") or str(pages.get("error")))
-    check("published by a workflow", pages.get("build_type") == "workflow", pages.get("build_type"))
-    check("HTTPS enforced", pages.get("https_enforced") is True, str(pages.get("https_enforced")))
+        if subdomain:
+            cname = dns(hostname, "CNAME")
+            check(f"{hostname} is a CNAME to {github_io}", cname == {github_io}, ", ".join(cname))
+            urls = [f"https://{hostname}/"]
+        else:
+            a, aaaa = dns(zone, "A"), dns(zone, "AAAA")
+            check("apex A records are exactly the GitHub Pages addresses", a == GITHUB_PAGES_IPV4, ", ".join(sorted(a)))
+            check("apex AAAA records are exactly the GitHub Pages addresses", aaaa == GITHUB_PAGES_IPV6, ", ".join(sorted(aaaa)))
+            cname = dns(f"www.{zone}", "CNAME")
+            check(f"www is a CNAME to {github_io}", cname == {github_io}, ", ".join(cname))
+            urls = [f"https://{zone}/", f"https://www.{zone}/"]
 
-    print("== HTTPS")
-    for url in (f"https://{domain}/", f"https://www.{domain}/"):
-        status = https_status(url)
-        check(f"{url} answers", status == 200, str(status))
+        pages = github(f"repos/{owner}/{repo}/pages")
+        check("GitHub Pages: custom domain set", pages.get("cname") == hostname, pages.get("cname") or str(pages.get("error")))
+        check("GitHub Pages: published by a workflow", pages.get("build_type") == "workflow", pages.get("build_type"))
+        check("GitHub Pages: HTTPS enforced", pages.get("https_enforced") is True, str(pages.get("https_enforced")))
+        for url in urls:
+            status = https_status(url)
+            check(f"{url} answers", status == 200, str(status))
 
     failed = results.count(False)
     print(f"\n{len(results) - failed}/{len(results)} checks passed.")

@@ -1,49 +1,59 @@
 # Offline tests: providers are mocked, no OVHcloud or GitHub call is made.
-# Plan only: an apply would run the parking cleanup script.
 mock_provider "ovh" {}
 mock_provider "github" {}
 
 variables {
   github_owner = "example-org"
-  repository   = "website"
-  description  = "Example website"
-  domain       = "example.dev"
-}
-
-run "github_pages_on_the_apex" {
-  command = plan
-
-  assert {
-    condition     = github_repository_pages.website.cname == "example.dev" && github_repository_pages.website.build_type == "workflow"
-    error_message = "Pages must serve the domain apex, published by a workflow."
-  }
-
-  assert {
-    condition     = github_repository.website.visibility == "public" && github_repository.website.archive_on_destroy
-    error_message = "The repository must be public and archived (not deleted) on destroy."
+  zone         = "example.dev"
+  sites = {
+    website = { description = "Main site", subdomain = "" }
+    docs    = { description = "Documentation", subdomain = "docs" }
   }
 }
 
-run "dns_points_to_github_pages_only" {
+run "apex_site" {
   command = plan
 
   assert {
-    condition     = toset([for r in ovh_domain_zone_record.apex_ipv4 : r.target]) == toset(["185.199.108.153", "185.199.109.153", "185.199.110.153", "185.199.111.153"])
-    error_message = "The apex must have exactly the four GitHub Pages IPv4 addresses."
+    condition     = module.site["website"].pages.cname == "example.dev" && module.site["website"].pages.build_type == "workflow"
+    error_message = "The apex site must serve the domain apex, published by a workflow."
   }
 
   assert {
-    condition     = length(ovh_domain_zone_record.apex_ipv6) == 4 && alltrue([for r in ovh_domain_zone_record.apex_ipv6 : r.fieldtype == "AAAA" && r.subdomain == ""])
-    error_message = "The apex must have the four GitHub Pages IPv6 addresses."
+    condition = toset([for r in module.site["website"].dns_records : "${r.type} ${r.subdomain} ${r.target}"]) == toset([
+      "A  185.199.108.153", "A  185.199.109.153", "A  185.199.110.153", "A  185.199.111.153",
+      "AAAA  2606:50c0:8000::153", "AAAA  2606:50c0:8001::153", "AAAA  2606:50c0:8002::153", "AAAA  2606:50c0:8003::153",
+      "CNAME www example-org.github.io.",
+    ])
+    error_message = "The apex site must have the GitHub Pages addresses on the apex and www as a CNAME, and nothing else."
+  }
+}
+
+run "subdomain_site" {
+  command = plan
+
+  assert {
+    condition     = module.site["docs"].pages.cname == "docs.example.dev" && module.site["docs"].url == "https://docs.example.dev"
+    error_message = "The subdomain site must serve its subdomain."
   }
 
   assert {
-    condition     = ovh_domain_zone_record.www.fieldtype == "CNAME" && ovh_domain_zone_record.www.target == "example-org.github.io."
-    error_message = "www must be a CNAME to the organisation's github.io host."
+    condition = toset([for r in module.site["docs"].dns_records : "${r.type} ${r.subdomain} ${r.target}"]) == toset([
+      "CNAME docs example-org.github.io.",
+    ])
+    error_message = "A subdomain site must only add a CNAME for its subdomain."
+  }
+}
+
+run "two_sites_on_the_same_subdomain_rejected" {
+  command = plan
+
+  variables {
+    sites = {
+      website = { subdomain = "" }
+      other   = { subdomain = "" }
+    }
   }
 
-  assert {
-    condition     = terraform_data.remove_ovh_parking.input == "example.dev"
-    error_message = "The parking cleanup must target the site domain."
-  }
+  expect_failures = [var.sites]
 }

@@ -260,15 +260,24 @@ The live checks need the OVH admin key and the local bootstrap state, so they ne
 
 ## Website
 
-`stacks/website` (applied by the CI) creates the `technogix/website` repository (Astro + React), publishes it on GitHub Pages and serves it on `technogix.dev` and `www.technogix.dev`:
+Sites are GitHub repositories published on GitHub Pages, one instance of `modules/github-pages-site` each. `stacks/website` (applied by the CI) lists them in `terraform.tfvars.json`:
 
-- repository: public, squash merges only (ruleset), branches deleted after merge, never deleted (`prevent_destroy`, `archive_on_destroy`, protected type of the pipeline guard);
-- GitHub Pages: published by a workflow of the website repository, custom domain on the apex. `.dev` is on the HSTS preload list: browsers always use HTTPS;
-- DNS (OVHcloud zone): four `A` and four `AAAA` records to GitHub Pages on the apex, `www` as a `CNAME` to `technogix.github.io`.
+```json
+"sites": {
+  "website": { "description": "Technogix website", "subdomain": "" },
+  "docs":    { "description": "Documentation",     "subdomain": "docs" }
+}
+```
 
-A new OVHcloud zone points the apex and `www` to the OVHcloud parking page. Terraform cannot delete records it does not manage, so the stack runs `scripts/remove_ovh_parking_records.py` once at apply time (a `terraform_data` step), before creating the site records: on a rebuild from scratch, the parking of the new zone is removed without any manual step. It only selects the parking records (`A 213.186.33.5`, `TXT "1|..."`, `TXT "3|welcome"` on the apex and `www`); mail records are never touched (unit tests in `tests/scripts/`).
+Each site adds its own resources, and only them:
 
-The site content and its publishing workflow live in the website repository and are pushed with git.
+- repository (keyed by its name): public, squash merges only (ruleset), branches deleted after merge, never deleted (`prevent_destroy`, `archive_on_destroy`, protected type of the pipeline guard);
+- GitHub Pages: published by a workflow of the site repository, custom domain set. `.dev` is on the HSTS preload list: browsers always use HTTPS;
+- DNS records in the OVHcloud zone: an apex site (`subdomain = ""`) gets four `A` and four `AAAA` records to GitHub Pages and `www` as a `CNAME` to `technogix.github.io`; a subdomain site gets a single `CNAME`.
+
+A new OVHcloud zone points the apex and `www` to the OVHcloud parking page. The parking comes with the domain order, so `modules/domain` delivers a clean zone: it runs `scripts/remove_ovh_parking_records.py` once at apply time (a `terraform_data` step). Terraform cannot delete records it does not manage, hence a script; on a rebuild from scratch, it runs again on the new zone. It only selects the parking records (`A 213.186.33.5`, `TXT "1|..."`, `TXT "3|welcome"` on the apex and `www`); mail records are never touched (unit tests in `tests/scripts/`).
+
+The site content and its publishing workflow live in the site repository and are pushed with git.
 
 ## State bucket protection
 

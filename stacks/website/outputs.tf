@@ -1,9 +1,4 @@
-output "repository" {
-  description = "Website repository."
-  value       = github_repository.website.full_name
-}
-
-output "url" {
-  description = "Public URL of the site."
-  value       = "https://${var.domain}"
+output "sites" {
+  description = "Public URL of each site, keyed by repository."
+  value       = { for name, s in module.site : name => s.url }
 }
