@@ -95,3 +95,16 @@ run "accented_address_rejected" {
 
   expect_failures = [var.users]
 }
+
+# OVHcloud only accepts a fixed list of sizes (decimal units): 5 GiB is not one.
+run "size_not_allowed_by_ovh_rejected" {
+  command = plan
+
+  variables {
+    users = [
+      { address = "alice.martin", full_name = "Alice Martin", size = 5368709120 },
+    ]
+  }
+
+  expect_failures = [var.users]
+}
