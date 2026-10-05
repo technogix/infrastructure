@@ -28,3 +28,9 @@ resource "ovh_domain_name" "this" {
     ignore_changes = [plan, ovh_subsidiary]
   }
 }
+
+# DNSSEC on the domain's OVHcloud DNS zone (created with the domain). OVHcloud
+# publishes the DS record at the registry itself.
+resource "ovh_domain_zone_dnssec" "this" {
+  zone_name = ovh_domain_name.this.domain_name
+}

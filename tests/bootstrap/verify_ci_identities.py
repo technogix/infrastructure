@@ -23,6 +23,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 API = "https://eu.api.ovh.com/1.0"
+# Domain names are read through the v2 API (/v2/domain/name/<domain>).
+API_V2 = "https://eu.api.ovh.com/v2"
 TOKEN_URL = "https://www.ovh.com/auth/oauth2/token"
 SUBSIDIARY = "IE"
 
@@ -43,10 +45,10 @@ def token(creds):
         return json.load(r)["access_token"]
 
 
-def call(tok, method, path, body=None):
+def call(tok, method, path, body=None, base=API):
     """Returns (HTTP status, parsed body or None)."""
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(API + path, data=data, method=method, headers={
+    req = urllib.request.Request(base + path, data=data, method=method, headers={
         "Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req) as r:
@@ -102,7 +104,7 @@ def main():
 
     print("== plan: read-only")
     for domain in domains:
-        expect_allowed_on_resource(f"plan: reads {domain}", call(plan, "GET", f"/domain/name/{domain}")[0])
+        expect_allowed_on_resource(f"plan: reads {domain}", call(plan, "GET", f"/domain/name/{domain}", base=API_V2)[0])
     expect_denied("plan: cannot read the account", call(plan, "GET", "/me")[0])
     expect_denied("plan: cannot read payment methods", call(plan, "GET", "/me/payment/method")[0])
     status, cart = call(plan, "POST", "/order/cart", {"ovhSubsidiary": SUBSIDIARY, "description": "ci-check"})
@@ -113,7 +115,7 @@ def main():
 
     print("== production: create and update, never delete")
     for domain in domains:
-        expect_allowed_on_resource(f"production: reads {domain}", call(prod, "GET", f"/domain/name/{domain}")[0])
+        expect_allowed_on_resource(f"production: reads {domain}", call(prod, "GET", f"/domain/name/{domain}", base=API_V2)[0])
     expect_allowed("production: reads the account", call(prod, "GET", "/me")[0])
     expect_allowed("production: reads payment methods", call(prod, "GET", "/me/payment/method?default=true")[0])
     status, cart = call(prod, "POST", "/order/cart", {"ovhSubsidiary": SUBSIDIARY, "description": "ci-check"})

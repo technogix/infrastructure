@@ -48,9 +48,14 @@ run() {
 terraform_tests() {
   local stack="$1" status=0
   rm -rf "stacks/$stack/.tests"
-  cp -r "tests/stacks/$stack" "stacks/$stack/.tests"
+  mkdir -p "stacks/$stack/.tests"
+  cp "tests/stacks/$stack"/*.tftest.hcl "stacks/$stack/.tests/"
+  # Own data dir: a local `terraform init` with the real backend (e.g. for an
+  # import) must not make the tests look for S3 credentials.
+  export TF_DATA_DIR="$root/stacks/$stack/.tests/.terraform"
   terraform -chdir="stacks/$stack" init -backend=false -input=false > /dev/null &&
     terraform -chdir="stacks/$stack" test -test-directory=.tests || status=$?
+  unset TF_DATA_DIR
   rm -rf "stacks/$stack/.tests"
   return "$status"
 }
@@ -59,7 +64,9 @@ run "Plan guard" "$python_bin" -m unittest discover -s tests/scripts -v
 
 for dir in tests/stacks/*/; do
   stack="$(basename "$dir")"
-  run "Terraform tests: $stack" terraform_tests "$stack"
+  if compgen -G "$dir*.tftest.hcl" > /dev/null; then
+    run "Terraform tests: $stack" terraform_tests "$stack"
+  fi
 done
 
 if [ "${1:-}" = "--live" ]; then
@@ -69,7 +76,7 @@ if [ "${1:-}" = "--live" ]; then
     export GITHUB_TOKEN
   fi
   if "$python_bin" -c "import boto3" > /dev/null 2>&1; then
-    for check in tests/bootstrap/verify_*.py; do
+    for check in tests/bootstrap/verify_*.py tests/stacks/*/verify_*.py; do
       run "Live: $(basename "$check" .py)" "$python_bin" "$check"
     done
   else

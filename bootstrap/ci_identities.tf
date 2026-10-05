@@ -5,6 +5,7 @@
 # Deliberately NOT granted to any CI identity, so that OVHcloud itself refuses
 # to destroy data even if the pipeline guard were bypassed:
 #   - emailDomain:apiovh:account/delete  (deleting a mailbox)
+#   - dnsZone:apiovh:dnssec/delete       (disabling DNSSEC)
 #   - service termination                (/services/{id}/terminate)
 
 data "ovh_me" "account" {}
@@ -14,6 +15,7 @@ locals {
 
   domain_urns       = [for d in var.managed_domains : "urn:v1:eu:resource:domain:${d}"]
   email_domain_urns = [for d in var.managed_domains : "urn:v1:eu:resource:emailDomain:${d}"]
+  dns_zone_urns     = [for d in var.managed_domains : "urn:v1:eu:resource:dnsZone:${d}"]
 }
 
 resource "ovh_me_api_oauth2_client" "ci" {
@@ -28,13 +30,14 @@ resource "ovh_me_api_oauth2_client" "ci" {
 
 resource "ovh_iam_policy" "ci_plan_read" {
   name        = "infrastructure-ci-plan-read"
-  description = "CI plan: read domains and mailboxes (managed by bootstrap/)"
+  description = "CI plan: read domains, DNS zones and mailboxes (managed by bootstrap/)"
   identities  = [ovh_me_api_oauth2_client.ci["plan"].identity]
-  resources   = concat(local.domain_urns, local.email_domain_urns)
+  resources   = concat(local.domain_urns, local.email_domain_urns, local.dns_zone_urns)
 
   allow = [
     "domain:apiovh:name/get",
     "emailDomain:apiovh:account/get",
+    "dnsZone:apiovh:dnssec/get",
   ]
 }
 
@@ -42,9 +45,9 @@ resource "ovh_iam_policy" "ci_plan_read" {
 
 resource "ovh_iam_policy" "ci_production_domains" {
   name        = "infrastructure-ci-production-domains"
-  description = "CI production: manage domains and mailboxes, no deletion (managed by bootstrap/)"
+  description = "CI production: manage domains, DNS zones and mailboxes, no deletion (managed by bootstrap/)"
   identities  = [ovh_me_api_oauth2_client.ci["production"].identity]
-  resources   = concat(local.domain_urns, local.email_domain_urns)
+  resources   = concat(local.domain_urns, local.email_domain_urns, local.dns_zone_urns)
 
   allow = [
     "domain:apiovh:name/get",
@@ -53,6 +56,8 @@ resource "ovh_iam_policy" "ci_production_domains" {
     "emailDomain:apiovh:account/create",
     "emailDomain:apiovh:account/edit",
     "emailDomain:apiovh:account/changePassword",
+    "dnsZone:apiovh:dnssec/get",
+    "dnsZone:apiovh:dnssec/create",
   ]
 }
 

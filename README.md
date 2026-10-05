@@ -29,7 +29,7 @@ Each stack has its own state (`<stack>/terraform.tfstate` in the bucket). A mist
 ### Adding a component
 
 - **New mailbox**: see [Mailboxes](#mailboxes).
-- **New domain**: add an entry to `domains` in `stacks/domain/terraform.tfvars`.
+- **New domain**: add an entry to `domains` in `stacks/domain/terraform.tfvars`. DNSSEC is enabled on every managed domain.
 - **New stack** (website, VM network, ...): create `stacks/<name>/` with its own `backend "s3" { key = "<name>/terraform.tfstate" }`, then add `<name>` to `stacks/stacks.json` at the right position in the apply order.
 - **New resource type that holds data**: add it to `policy/protected-resource-types.txt` and set `prevent_destroy = true` on it in its module.
 
@@ -172,8 +172,8 @@ The CI authenticates as two OAuth2 service accounts (`bootstrap/ci_identities.tf
 
 | Identity | Can | Cannot |
 |---|---|---|
-| `infrastructure-ci-plan` | Read domains and mailboxes | Anything else: no write, no account data, no orders |
-| `infrastructure-ci-production` | Order services, update domains, create and update mailboxes | **Delete a mailbox, terminate a service**, access the Public Cloud project or API credentials |
+| `infrastructure-ci-plan` | Read domains, DNSSEC status and mailboxes | Anything else: no write, no account data, no orders |
+| `infrastructure-ci-production` | Order services, update domains, enable DNSSEC, create and update mailboxes | **Delete a mailbox, disable DNSSEC, terminate a service**, access the Public Cloud project or API credentials |
 
 Deletion of data is refused by OVHcloud itself, on top of the pipeline guard. A new domain must be added to `managed_domains`, and the bootstrap re-applied, before the pipeline can manage it. The action names come from the `iamActions` of the [OVHcloud API schemas](https://eu.api.ovh.com/1.0/email/domain.json).
 
@@ -240,6 +240,7 @@ tests/run.sh --live   # offline, then live checks against OVHcloud (local only)
 |---|---|---|
 | `tests/scripts/` | Unit tests of the CI scripts (plan guard) | CI and local |
 | `tests/stacks/<stack>/` | `terraform test` files of a stack, with mocked providers | CI and local |
+| `tests/stacks/<stack>/verify_*.py` | Live checks of a stack (e.g. DNSSEC validated by public resolvers) | Local only (`--live`) |
 | `tests/bootstrap/` | Live checks of the bootstrap: state bucket (real Terraform backend cycle, forbidden operations), CI identities (IAM permissions) and GitHub environments (protection rules, secret names) | Local only (`--live`) |
 
 The live checks need the OVH admin key and the local bootstrap state, so they never run in CI. Terraform only accepts tests inside a configuration directory: `run.sh` copies `tests/stacks/<stack>/` into a temporary, gitignored `stacks/<stack>/.tests/` while it runs.
