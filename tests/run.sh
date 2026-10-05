@@ -50,8 +50,12 @@ terraform_tests() {
   rm -rf "stacks/$stack/.tests"
   mkdir -p "stacks/$stack/.tests"
   cp "tests/stacks/$stack"/*.tftest.hcl "stacks/$stack/.tests/"
+  # Own data dir: a local `terraform init` with the real backend (e.g. for an
+  # import) must not make the tests look for S3 credentials.
+  export TF_DATA_DIR="$root/stacks/$stack/.tests/.terraform"
   terraform -chdir="stacks/$stack" init -backend=false -input=false > /dev/null &&
     terraform -chdir="stacks/$stack" test -test-directory=.tests || status=$?
+  unset TF_DATA_DIR
   rm -rf "stacks/$stack/.tests"
   return "$status"
 }
