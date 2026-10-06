@@ -283,8 +283,8 @@ Sites are GitHub repositories published on GitHub Pages, one instance of `module
 
 Each site adds its own resources, and only them:
 
-- repository (keyed by its name): public, squash merges only (ruleset), branches deleted after merge, never deleted (`prevent_destroy`, `archive_on_destroy`, protected type of the pipeline guard);
-- GitHub Pages: published by a workflow of the site repository, custom domain set. `.dev` is on the HSTS preload list: browsers always use HTTPS;
+- repository (keyed by its name): public, squash merges only (enforced by the ruleset; the repository merge settings are set at creation and then ignored, because the read-only plan App cannot read them), branches deleted after merge, never deleted (`prevent_destroy`, `archive_on_destroy`, protected type of the pipeline guard);
+- GitHub Pages: published by a workflow of the site repository, custom domain set, HTTPS enforced (both only apply once Pages exists and the certificate is issued: the deploy job applies again until convergence). `.dev` is on the HSTS preload list anyway;
 - DNS records in the OVHcloud zone: an apex site (`subdomain = ""`) gets four `A` and four `AAAA` records to GitHub Pages and `www` as a `CNAME` to `technogix.github.io`; a subdomain site gets a single `CNAME`.
 
 A new OVHcloud zone points the apex and `www` to the OVHcloud parking page. The parking comes with the domain order, so `modules/domain` delivers a clean zone: it runs `scripts/remove_ovh_parking_records.py` once at apply time (a `terraform_data` step). Terraform cannot delete records it does not manage, hence a script; on a rebuild from scratch, it runs again on the new zone. It only selects the parking records (`A 213.186.33.5`, `TXT "1|..."`, `TXT "3|welcome"` on the apex and `www`); mail records are never touched (unit tests in `tests/scripts/`).
