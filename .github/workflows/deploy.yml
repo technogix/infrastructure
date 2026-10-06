@@ -173,6 +173,10 @@ jobs:
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: scripts/decrypt-config.sh
+      # Each stack is applied until its plan is empty, at most twice: some
+      # provider settings only apply once the resource exists (e.g. the
+      # GitHub Pages custom domain). Still not empty after the second apply:
+      # the code does not converge, the job fails.
       - name: terraform apply
         run: |
           set -euo pipefail
@@ -181,21 +185,30 @@ jobs:
             cd "stacks/$stack"
             terraform init -backend-config=../../backend.hcl
 
-            set +e
-            terraform plan -out=tfplan -detailed-exitcode
-            code=$?
-            set -e
+            for pass in 1 2 3; do
+              set +e
+              terraform plan -out=tfplan -detailed-exitcode
+              code=$?
+              set -e
 
-            case $code in
-              0) echo "No changes." ;;
-              2)
-                terraform show -json tfplan > plan.json
-                python3 ../../scripts/plan_guard.py plan.json
-                python3 ../../scripts/check_domain_orders.py plan.json
-                terraform apply tfplan
-                ;;
-              *) exit "$code" ;;
-            esac
+              case $code in
+                0)
+                  echo "No changes (pass $pass)."
+                  break
+                  ;;
+                2)
+                  if [ "$pass" -eq 3 ]; then
+                    echo "::error::$stack still has changes after two applies: the code does not converge."
+                    exit 1
+                  fi
+                  terraform show -json tfplan > plan.json
+                  python3 ../../scripts/plan_guard.py plan.json
+                  python3 ../../scripts/check_domain_orders.py plan.json
+                  terraform apply tfplan
+                  ;;
+                *) exit "$code" ;;
+              esac
+            done
 
             cd - > /dev/null
             echo "::endgroup::"

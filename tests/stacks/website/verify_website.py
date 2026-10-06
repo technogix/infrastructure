@@ -3,7 +3,7 @@
 
 Live test, run locally (tests/run.sh --live). Read-only. For each site of
 stacks/website/terraform.tfvars.json:
-  - public DNS (Cloudflare DNS over HTTPS): an apex site resolves only to the
+  - public DNS (Cloudflare or Google DNS over HTTPS): an apex site resolves only to the
     GitHub Pages addresses (no OVHcloud parking left) and www is a CNAME to
     <owner>.github.io; a subdomain site is a CNAME to <owner>.github.io;
   - GitHub Pages: custom domain set, published by a workflow, certificate;
@@ -20,7 +20,8 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-DOH = "https://cloudflare-dns.com/dns-query"
+# Public resolvers (DNS over HTTPS), tried in order.
+RESOLVERS = ["https://cloudflare-dns.com/dns-query", "https://dns.google/resolve"]
 GITHUB_PAGES_IPV4 = {"185.199.108.153", "185.199.109.153", "185.199.110.153", "185.199.111.153"}
 GITHUB_PAGES_IPV6 = {"2606:50c0:8000::153", "2606:50c0:8001::153", "2606:50c0:8002::153", "2606:50c0:8003::153"}
 
@@ -37,12 +38,18 @@ def tfvars():
 
 
 def dns(name, rtype):
+    """Records of a type, from the first public resolver that answers."""
     query = urllib.parse.urlencode({"name": name, "type": rtype})
-    req = urllib.request.Request(f"{DOH}?{query}", headers={"Accept": "application/dns-json"})
-    with urllib.request.urlopen(req, timeout=15) as r:
-        answers = json.load(r).get("Answer", [])
     type_code = {"A": 1, "AAAA": 28, "CNAME": 5}[rtype]
-    return {a["data"].rstrip(".").lower() for a in answers if a["type"] == type_code}
+    for url in RESOLVERS:
+        req = urllib.request.Request(f"{url}?{query}", headers={"Accept": "application/dns-json"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                answers = json.load(r).get("Answer", [])
+            return {a["data"].rstrip(".").lower() for a in answers if a["type"] == type_code}
+        except (urllib.error.URLError, TimeoutError) as e:
+            print(f"       {url}: {getattr(e, 'reason', e)}")
+    return {"<no resolver reachable>"}
 
 
 def github(path):
@@ -89,6 +96,17 @@ def main():
             check(f"www is a CNAME to {github_io}", cname == {github_io}, ", ".join(cname))
             urls = [f"https://{zone}/", f"https://www.{zone}/"]
 
+        settings = github(f"repos/{owner}/{repo}")
+        check("repository: branches deleted after merge", settings.get("delete_branch_on_merge") is True,
+              str(settings.get("delete_branch_on_merge")))
+        # Merge methods are enforced by the ruleset, not by the repository
+        # settings (which keep GitHub's defaults, see modules/github-pages-site).
+        rulesets = [r for r in github(f"repos/{owner}/{repo}/rulesets") if r.get("name") == "main"]
+        methods = []
+        if rulesets:
+            rules = github(f"repos/{owner}/{repo}/rulesets/{rulesets[0]['id']}").get("rules", [])
+            methods = next((r["parameters"]["allowed_merge_methods"] for r in rules if r["type"] == "pull_request"), [])
+        check("ruleset main: squash merges only", methods == ["squash"], ", ".join(methods) or "no ruleset")
         pages = github(f"repos/{owner}/{repo}/pages")
         check("GitHub Pages: custom domain set", pages.get("cname") == hostname, pages.get("cname") or str(pages.get("error")))
         check("GitHub Pages: published by a workflow", pages.get("build_type") == "workflow", pages.get("build_type"))

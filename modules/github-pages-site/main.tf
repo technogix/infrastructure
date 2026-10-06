@@ -41,9 +41,11 @@ resource "github_repository" "this" {
   has_projects    = false
   has_wiki        = false
 
-  # Merge methods are enforced by the ruleset below: with GitHub App
-  # authentication, reading the repository merge settings would require
-  # contents:write even for the read-only plan identity.
+  # Set at creation only. With GitHub App authentication, reading the merge
+  # settings requires contents:write: the read-only plan identity reads them
+  # as false or empty, which would show a fake change in every pull request.
+  # The ruleset below enforces squash merges; tests/stacks/website checks
+  # these settings live.
   delete_branch_on_merge = true
 
   # The repository holds the site code and its history: never deleted.
@@ -52,6 +54,16 @@ resource "github_repository" "this" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      allow_merge_commit,
+      allow_rebase_merge,
+      allow_squash_merge,
+      merge_commit_message,
+      merge_commit_title,
+      squash_merge_commit_message,
+      squash_merge_commit_title,
+      delete_branch_on_merge,
+    ]
   }
 }
 
@@ -87,11 +99,14 @@ resource "github_repository_ruleset" "main" {
 # --- GitHub Pages ------------------------------------------------------------
 
 # Published by a GitHub Actions workflow of the repository. The DNS records
-# come first, so that GitHub can issue the HTTPS certificate.
+# come first, so that GitHub can issue the HTTPS certificate. The custom
+# domain and HTTPS enforcement only apply once Pages exists and the
+# certificate is issued: the deploy job applies again until convergence.
 resource "github_repository_pages" "this" {
-  repository = github_repository.this.name
-  build_type = "workflow"
-  cname      = local.hostname
+  repository     = github_repository.this.name
+  build_type     = "workflow"
+  cname          = local.hostname
+  https_enforced = true
 
   depends_on = [
     ovh_domain_zone_record.apex_ipv4,
