@@ -151,7 +151,7 @@ import {
 | Event | Jobs |
 |---|---|
 | Pull request to `main` | `check` (fmt, validate and offline tests, no secrets) then `plan` for each stack, with read-only credentials. The plan is in the job log, with private values masked; the job summary shows the change counts and the guard result. |
-| Push to `main` | Same as above, then `apply`: waits for approval, then re-plans, re-checks and applies each stack in the order of `stacks.json`. |
+| Push to `main` | Same as above, then `apply`: waits for approval, then re-plans, re-checks and applies each stack in the order of `stacks.json`, until its plan is empty (at most two applies: some provider settings, like the GitHub Pages custom domain, only apply once the resource exists; a stack still not converged fails the job). |
 
 ### Making a change
 
