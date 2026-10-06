@@ -88,6 +88,12 @@ forwards:
 
 The provider cannot manage MX Plan redirections, so the email stack runs `scripts/sync_email_forwards.py` whenever the list changes (a `terraform_data` step): it makes the redirections of the managed mailboxes match exactly, and leaves any other redirection alone. Targets are private (encrypted, masked in the CI logs, never printed). Forwarded mail can be classified as spam by the target when its original sender has a strict DMARC policy.
 
+**Reading forwarded mail in Gmail**: OVHcloud forwards mail without rewriting its sender, so the target cannot authenticate it (SPF, then DMARC of the original sender): Gmail classifies part of it as spam, and may refuse it when the sender's DMARC policy is `reject`. Nothing is lost: the local copy keeps every message in the OVHcloud mailbox. In Gmail, create a filter on `deliveredto:<address>` with "Never send it to Spam".
+
+Gmail does not show in the inbox a message you sent yourself to an address it does not know as yours, when it comes back through a forward (it is already in Sent). To test a forward, write from an address that is not linked to the Gmail account.
+
+**Address roles**: `contact@` only receives; replies are sent from the nominative address.
+
 **Sending from Gmail as a managed address** is a setting of the Gmail account, outside this infrastructure: Gmail > Settings > Accounts and Import > Send mail as > Add another email address, SMTP server `ssl0.ovh.net`, port 465, SSL, the full address and the mailbox password. Mail is then sent through OVHcloud: SPF and DKIM of the domain stay valid.
 
 **Never remove or rename an entry.** Either change would delete a mailbox and its emails, so the pipeline refuses it. Addresses use lowercase letters without accents (`agnes`, not `agnès`); the validation rejects anything else.
