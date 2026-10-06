@@ -53,9 +53,12 @@ terraform_tests() {
   # Own data dir: a local `terraform init` with the real backend (e.g. for an
   # import) must not make the tests look for S3 credentials.
   export TF_DATA_DIR="$root/stacks/$stack/.tests/.terraform"
+  # Scripts run by provisioners do nothing in offline tests (see
+  # scripts/sync_email_forwards.py): `terraform test` cannot skip provisioners.
+  export INFRA_OFFLINE_TESTS=1
   terraform -chdir="stacks/$stack" init -backend=false -input=false > /dev/null &&
     terraform -chdir="stacks/$stack" test -test-directory=.tests || status=$?
-  unset TF_DATA_DIR
+  unset TF_DATA_DIR INFRA_OFFLINE_TESTS
   rm -rf "stacks/$stack/.tests"
   return "$status"
 }

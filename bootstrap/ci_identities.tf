@@ -37,6 +37,7 @@ resource "ovh_iam_policy" "ci_plan_read" {
   allow = [
     "domain:apiovh:name/get",
     "emailDomain:apiovh:account/get",
+    "emailDomain:apiovh:redirection/get",
     "dnsZone:apiovh:dnssec/get",
     "dnsZone:apiovh:record/get",
   ]
@@ -57,6 +58,10 @@ resource "ovh_iam_policy" "ci_production_domains" {
     "emailDomain:apiovh:account/create",
     "emailDomain:apiovh:account/edit",
     "emailDomain:apiovh:account/changePassword",
+    # Forwards are configuration, not data (scripts/sync_email_forwards.py).
+    "emailDomain:apiovh:redirection/get",
+    "emailDomain:apiovh:redirection/create",
+    "emailDomain:apiovh:redirection/delete",
     "dnsZone:apiovh:dnssec/get",
     "dnsZone:apiovh:dnssec/create",
     # DNS records are configuration, not data: changing a record type means

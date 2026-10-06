@@ -78,6 +78,18 @@ After the apply, give the new person their initial password, then ask them to ch
 terraform output -json initial_passwords
 ```
 
+**Forwards**: `forwards` in the same encrypted file sends the mail of a mailbox to another address, keeping a local copy in the mailbox:
+
+```yaml
+forwards:
+  - from: contact
+    to: someone@example.org
+```
+
+The provider cannot manage MX Plan redirections, so the email stack runs `scripts/sync_email_forwards.py` whenever the list changes (a `terraform_data` step): it makes the redirections of the managed mailboxes match exactly, and leaves any other redirection alone. Targets are private (encrypted, masked in the CI logs, never printed). Forwarded mail can be classified as spam by the target when its original sender has a strict DMARC policy.
+
+**Sending from Gmail as a managed address** is a setting of the Gmail account, outside this infrastructure: Gmail > Settings > Accounts and Import > Send mail as > Add another email address, SMTP server `ssl0.ovh.net`, port 465, SSL, the full address and the mailbox password. Mail is then sent through OVHcloud: SPF and DKIM of the domain stay valid.
+
 **Never remove or rename an entry.** Either change would delete a mailbox and its emails, so the pipeline refuses it. Addresses use lowercase letters without accents (`agnes`, not `agnès`); the validation rejects anything else.
 
 **Offboarding**: replace the entry with a `removed` block. Terraform then stops managing the mailbox but keeps it and its data. Archive or delete it later from the OVHcloud control panel.

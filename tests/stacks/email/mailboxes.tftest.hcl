@@ -108,3 +108,34 @@ run "size_not_allowed_by_ovh_rejected" {
 
   expect_failures = [var.users]
 }
+
+run "forward_from_a_declared_mailbox" {
+  command   = plan
+  state_key = "forwards" # independent of the mailbox runs above
+
+  variables {
+    forwards = [{ from = "contact", to = "someone@example.org" }]
+  }
+}
+
+run "forward_from_an_unknown_mailbox_rejected" {
+  command   = plan
+  state_key = "forwards" # independent of the mailbox runs above
+
+  variables {
+    forwards = [{ from = "nobody", to = "someone@example.org" }]
+  }
+
+  expect_failures = [terraform_data.email_forwards]
+}
+
+run "forward_to_something_else_than_an_address_rejected" {
+  command   = plan
+  state_key = "forwards" # independent of the mailbox runs above
+
+  variables {
+    forwards = [{ from = "contact", to = "not-an-address" }]
+  }
+
+  expect_failures = [var.forwards]
+}
