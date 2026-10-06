@@ -24,5 +24,8 @@ ovh_hosting_privatedatabase*
 # Web hosting
 ovh_hosting_*
 
+# Source code and its history
+github_repository
+
 # Uncomment if VMs keep data on their local disk instead of attached volumes:
 # ovh_cloud_project_instance

@@ -79,6 +79,18 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
+      # Installation token (1 h) of the environment's GitHub App, used by the
+      # github provider. The App's key never reaches Terraform.
+      - name: GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Use the GitHub App token
+        working-directory: .
+        run: echo "GITHUB_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
       - name: Install sops
         working-directory: .
         run: |
@@ -138,6 +150,17 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
+      # Installation token (1 h) of the environment's GitHub App, used by the
+      # github provider. The App's key never reaches Terraform.
+      - name: GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Use the GitHub App token
+        run: echo "GITHUB_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
       - name: Install sops
         run: |
           mkdir -p "$RUNNER_TEMP/bin"

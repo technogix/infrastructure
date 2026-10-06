@@ -34,3 +34,16 @@ resource "ovh_domain_name" "this" {
 resource "ovh_domain_zone_dnssec" "this" {
   zone_name = ovh_domain_name.this.domain_name
 }
+
+# A new OVHcloud zone points the apex and www to the OVHcloud parking page.
+# The module that orders the domain delivers a clean zone: this step removes
+# the parking records (and only them) once, at apply time. Terraform cannot
+# delete records it does not manage, hence a script; on a rebuild from
+# scratch, it runs again on the new zone. Sites then add their own records.
+resource "terraform_data" "remove_ovh_parking" {
+  input = ovh_domain_name.this.domain_name
+
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/../../scripts/remove_ovh_parking_records.py ${self.input}"
+  }
+}

@@ -43,3 +43,16 @@ variable "sops_age_key_file" {
   description = "Local file holding the age private key used by SOPS (e.g. %AppData%/sops/age/keys.txt on Windows, ~/.config/sops/age/keys.txt on Linux)."
   type        = string
 }
+
+variable "github_apps" {
+  description = "GitHub Apps of the CI per environment (created by hand: GitHub cannot create Apps through its API). The private key is read from a local file."
+  type = map(object({
+    app_id           = string
+    private_key_file = string
+  }))
+
+  validation {
+    condition     = toset(keys(var.github_apps)) == toset(["plan", "production"])
+    error_message = "One GitHub App per environment: plan and production."
+  }
+}

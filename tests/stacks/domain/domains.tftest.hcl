@@ -1,4 +1,5 @@
 # Offline tests: providers are mocked, no OVHcloud call is made.
+# Plan only: an apply would run the parking cleanup script.
 mock_provider "ovh" {}
 
 variables {
@@ -9,8 +10,8 @@ variables {
   }
 }
 
-run "every_domain_has_dnssec" {
-  command = apply
+run "every_domain_is_managed" {
+  command = plan
 
   assert {
     condition     = toset(keys(module.domain)) == toset(["example.dev", "example.eu"])
@@ -25,7 +26,7 @@ run "every_domain_has_dnssec" {
   }
 
   assert {
-    condition     = module.domain["example.dev"].dnssec_status != null && module.domain["example.eu"].dnssec_status != null
-    error_message = "DNSSEC is not managed for every domain."
+    condition     = alltrue([for name, d in module.domain : d.parking_removed_from == name])
+    error_message = "Every domain must have its zone cleaned of the OVHcloud parking."
   }
 }

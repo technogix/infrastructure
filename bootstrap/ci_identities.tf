@@ -38,6 +38,7 @@ resource "ovh_iam_policy" "ci_plan_read" {
     "domain:apiovh:name/get",
     "emailDomain:apiovh:account/get",
     "dnsZone:apiovh:dnssec/get",
+    "dnsZone:apiovh:record/get",
   ]
 }
 
@@ -58,6 +59,13 @@ resource "ovh_iam_policy" "ci_production_domains" {
     "emailDomain:apiovh:account/changePassword",
     "dnsZone:apiovh:dnssec/get",
     "dnsZone:apiovh:dnssec/create",
+    # DNS records are configuration, not data: changing a record type means
+    # deleting and recreating it, and OVHcloud parking records are removed.
+    "dnsZone:apiovh:record/get",
+    "dnsZone:apiovh:record/create",
+    "dnsZone:apiovh:record/edit",
+    "dnsZone:apiovh:record/delete",
+    "dnsZone:apiovh:refresh",
   ]
 }
 
