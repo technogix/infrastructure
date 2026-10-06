@@ -17,3 +17,6 @@ __pycache__/
 
 # Temporary copies of tests/stacks/* made by tests/run.sh.
 .tests/
+
+# Personal Claude Code settings (shared ones are in .claude/settings.json).
+.claude/settings.local.json

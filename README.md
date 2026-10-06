@@ -11,18 +11,23 @@ Terraform code for the Technogix infrastructure on OVHcloud, deployed by GitHub 
 ## Layout
 
 ```
-bootstrap/        One-time setup: Terraform state bucket + S3 keys (local state)
-modules/          Reusable building blocks (domain, email-account, ...)
-stacks/           Deployable units, one remote state each
-  domain/         Domain names
-  email/          Mailboxes
-  website/        Website repository, GitHub Pages and its DNS records
+bootstrap/        Prerequisites the CI cannot create, applied locally: state bucket, CI identities,
+                  GitHub environments and their secrets, infrastructure ruleset
+modules/          Reusable building blocks: domain, email-account, github-pages-site
+stacks/           Deployable units applied by the CI, one remote state each
+  domain/         Domain names (DNSSEC, clean zone)
+  email/          Mailboxes and forwards
+  website/        Sites published on GitHub Pages, with their DNS records
   stacks.json     Apply order of the stacks
 policy/           Resource types the pipeline must never destroy
-scripts/          Repository tooling, used by the CI and locally (plan guard, decryption)
+scripts/          Repository tooling, used by the CI and locally (guard, checks, decryption, sync)
 tests/            All tests, run by tests/run.sh
+docs/decisions/   Architecture decisions: why things are the way they are
 backend.hcl       Shared S3 backend settings
 .sops.yaml        Who can decrypt the private configuration
+CLAUDE.md         Rules and traps, for Claude Code and newcomers
+.claude/          Shared Claude Code settings: sensitive files unreadable, confirmation
+                  before any write outside the machine
 ```
 
 Each stack has its own state (`<stack>/terraform.tfstate` in the bucket). A mistake in one stack cannot touch the others, and plans stay small.
@@ -87,6 +92,12 @@ forwards:
 ```
 
 The provider cannot manage MX Plan redirections, so the email stack runs `scripts/sync_email_forwards.py` whenever the list changes (a `terraform_data` step): it makes the redirections of the managed mailboxes match exactly, and leaves any other redirection alone. Targets are private (encrypted, masked in the CI logs, never printed). Forwarded mail can be classified as spam by the target when its original sender has a strict DMARC policy.
+
+**Reading forwarded mail in Gmail**: OVHcloud forwards mail without rewriting its sender, so the target cannot authenticate it (SPF, then DMARC of the original sender): Gmail classifies part of it as spam, and may refuse it when the sender's DMARC policy is `reject`. Nothing is lost: the local copy keeps every message in the OVHcloud mailbox. In Gmail, create a filter on `deliveredto:<address>` with "Never send it to Spam".
+
+Gmail does not show in the inbox a message you sent yourself to an address it does not know as yours, when it comes back through a forward (it is already in Sent). To test a forward, write from an address that is not linked to the Gmail account.
+
+**Address roles**: `contact@` only receives; replies are sent from the nominative address.
 
 **Sending from Gmail as a managed address** is a setting of the Gmail account, outside this infrastructure: Gmail > Settings > Accounts and Import > Send mail as > Add another email address, SMTP server `ssl0.ovh.net`, port 465, SSL, the full address and the mailbox password. Mail is then sent through OVHcloud: SPF and DKIM of the domain stay valid.
 
