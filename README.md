@@ -11,18 +11,23 @@ Terraform code for the Technogix infrastructure on OVHcloud, deployed by GitHub 
 ## Layout
 
 ```
-bootstrap/        One-time setup: Terraform state bucket + S3 keys (local state)
-modules/          Reusable building blocks (domain, email-account, ...)
-stacks/           Deployable units, one remote state each
-  domain/         Domain names
-  email/          Mailboxes
-  website/        Website repository, GitHub Pages and its DNS records
+bootstrap/        Prerequisites the CI cannot create, applied locally: state bucket, CI identities,
+                  GitHub environments and their secrets, infrastructure ruleset
+modules/          Reusable building blocks: domain, email-account, github-pages-site
+stacks/           Deployable units applied by the CI, one remote state each
+  domain/         Domain names (DNSSEC, clean zone)
+  email/          Mailboxes and forwards
+  website/        Sites published on GitHub Pages, with their DNS records
   stacks.json     Apply order of the stacks
 policy/           Resource types the pipeline must never destroy
-scripts/          Repository tooling, used by the CI and locally (plan guard, decryption)
+scripts/          Repository tooling, used by the CI and locally (guard, checks, decryption, sync)
 tests/            All tests, run by tests/run.sh
+docs/decisions/   Architecture decisions: why things are the way they are
 backend.hcl       Shared S3 backend settings
 .sops.yaml        Who can decrypt the private configuration
+CLAUDE.md         Rules and traps, for Claude Code and newcomers
+.claude/          Shared Claude Code settings: sensitive files unreadable, confirmation
+                  before any write outside the machine
 ```
 
 Each stack has its own state (`<stack>/terraform.tfstate` in the bucket). A mistake in one stack cannot touch the others, and plans stay small.
