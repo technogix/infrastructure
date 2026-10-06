@@ -54,3 +54,22 @@ variable "users" {
     error_message = "Each address must appear only once across company_mailboxes and users."
   }
 }
+
+variable "forwards" {
+  description = "Forwards of managed mailboxes to other addresses (a local copy is always kept). From mailboxes.enc.yaml: targets are private."
+  type = list(object({
+    from = string
+    to   = string
+  }))
+  default = []
+
+  validation {
+    condition     = alltrue([for f in var.forwards : can(regex("^[^@ ]+@[^@ ]+[.][^@ ]+$", f.to))])
+    error_message = "Each forward target must be an email address."
+  }
+
+  validation {
+    condition     = length(distinct([for f in var.forwards : "${lower(f.from)} ${lower(f.to)}"])) == length(var.forwards)
+    error_message = "A forward is declared twice."
+  }
+}
